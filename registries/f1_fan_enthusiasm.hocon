@@ -1,0 +1,150 @@
+
+{
+    include "registries/aaosa.hocon"
+    "metadata": {
+        "description": "A simple agent network to evaluate a Formula One fan’s enthusiasm and emotional engagement with the sport.",
+        "tags": ["f1-fan-eval", "f1-enthusiasm", "f1-fan", "vc_manage_eval"],
+        "sample_queries": {
+            "1": {
+                "input": "F1 is fine, I guess. The races are long, and sometimes I get bored, but I’ll watch the highlights when I have time. It’s cool when someone wins, but I don’t really care who. The cars sound okay, I guess.",
+                "expected_output": "10–25 range across sub-criteria"
+            },
+            "2": {
+                "input": "I like watching F1 sometimes. It’s exciting when there’s a crash or a close finish. I usually cheer for Ferrari because of their red cars. I don’t follow every race, but I check who wins now and then.",
+                "expected_output": "31–50 range across sub-criteria"
+            },
+            "3": {
+                "input": "F1 gets my attention every Sunday. The atmosphere, the sound, and the tension before lights out always pump me up. I like seeing rivalries like Verstappen vs Hamilton and how unpredictable some races get.",
+                "expected_output": "51–70 range across sub-criteria"
+            },
+            "4": {
+                "input": "Every F1 weekend feels like an event — from qualifying drama to strategy twists. When I hear ‘It’s lights out and away we go!’, I get chills. Even when my favorite team struggles, I can’t stop watching.",
+                "expected_output": "71–89 range across sub-criteria"
+            },
+            "5": {
+                "input": "F1 is pure adrenaline. I still replay Senna’s Monaco laps, Hamilton’s Brazil 2021 comeback, and Alonso’s duels with Schumacher. The sound of engines, tire smoke, and strategy mind games — it’s poetry in motion, my favorite addiction.",
+                "expected_output": "90–100 range across sub-criteria"
+            }
+        }
+    },
+    "llm_config": {
+        "use_model": "gpt-4o",
+    },
+    "max_iterations": 40000,
+    "max_execution_seconds": 6000,
+
+    "grounding_instructions": """
+Follow this rubric when evaluating F1-related responses.  
+Use the same scale for all criteria (1–100):
+
+### RUBRIC
+**1–30: Poor or Minimal** – Lacks factual accuracy, shows little to no F1 understanding, very generic or confused.  
+**31–50: Below Average** – Some relevant references, but incorrect or superficial; lacks depth or precision.  
+**51–70: Average to Good** – Basic understanding shown; reasonably accurate but not insightful.  
+**71–89: Strong** – Knowledgeable, specific, confident, and contextually correct; engaging or thoughtful.  
+**90–100: Exceptional** – Deep, expert-level insight; correct terminology, memorable phrasing, or highly contextual clarity.
+
+### SCORING POLICY
+- Penalize vague, generic, or repetitive statements.  
+- Reserve 90+ for truly exceptional, insightful responses.  
+- Use the full 1–100 range; don’t cluster around 60–80.  
+- No score may be null or omitted. 
+    """,
+    "aaosa_instructions_suffix": """
+**IMPORTANT:** Always invoke your 'evaluate_score' tool with the full text as 'inquiry' to evaluate the inputs.
+If the returned score is None or null or empty, invoke the 'evaluate_score' tool again.
+    """,
+
+    "tools": [
+        {
+            "name": "f1-enthusiasm-eval",
+            "function": {
+                "description": "I can help you evaluate a fan’s Formula 1 enthusiasm and engagement based on their submission."
+            },
+            "instructions": """
+You are the orchestration agent for F1 fan evaluation.
+
+Your task is to analyze a fan’s text submission and coordinate a scoring process by invoking 'evaluate_score'.
+The text is short (or sometimes vague) and should be judged on the given sub-criteria in connection to F1.
+
+ALWAYS call 'evaluate_score' to perform the scoring.
+            """${aaosa_instructions_suffix},
+            "allow": {
+                "to_upstream": {
+                    "sly_data": {
+                        "evaluation": true,
+                    }
+                }
+            },
+            "tools": ["evaluate_score"]
+        },
+        # Evaluate Innovation
+        {
+            "name": "evaluate_score",
+            "function": ${aaosa_call},
+            "instructions": """
+You are an F1 culture and fan engagement specialist evaluating a fan’s enthusiasm for the sport.
+Always use your tools to evaluate the inputs.
+
+Step 1:
+""" ${grounding_instructions} """
+
+Evaluate **F1 Enthusiasm** specifically on these 10 sub-criteria (each scored 1–100):
+1. Expressed passion for racing and competition
+2. Emotional connection to F1 history and moments
+3. Energy and tone in language used
+4. Sense of excitement for race weekends
+5. Appreciation for driver or team storylines
+6. Enjoyment of F1 culture (sound, atmosphere, fandom)
+7. Depth of personal engagement (rituals, habits, following)
+8. Ability to convey contagious excitement to others
+9. Authenticity and sincerity of emotion
+10. Overall intensity of F1 enthusiasm and love for the sport
+
+If the text is too vague, adjust scores accordingly.
+
+Step 2:
+Return a JSON object:
+{{
+  "score": [<a list of above 10 scores, all between 1 and 100>],
+  "brief_description": "<Brief rationale of your evaluation>"
+}}
+
+Step 3:
+**IMPORTANT:** Always call the 'manage_eval' tool with this JSON to store the evaluation result.
+            """,
+            "command": """
+Call the 'manage_eval' tool and return the json block with following fields:
+{{
+    "score": <number between 1 and 100 (1 = no enthusiasm at all, 100 = exceptionally high enthusiasm)>,
+    "brief_description": "<brief description of your scoring rationale>"
+}}
+            """,
+            "tools": ["manage_eval"]
+        },
+        // Manage idea evaluation
+        {
+            "name": "manage_eval",
+            "function": {
+                "description": "I can update the evaluation with the scores and descriptions provided by the other tools.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "score": {
+                            "type": "array",
+                            "items": {
+                                "type": "float",
+                                },
+                            "description": "a list of scores, between 1 and 100."
+                        },
+                        "brief_description": {
+                            "type": "string",
+                            "description": "Short rationale for the scoring outcome."
+                        }
+                    },
+                }
+            },
+            "class": "vc_manage_eval.ManageEval"
+        },
+    ]
+}

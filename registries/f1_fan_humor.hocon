@@ -1,0 +1,150 @@
+
+{
+    include "registries/aaosa.hocon"
+    "metadata": {
+        "description": "A simple agent network to evaluate the humor, wit, and playfulness in Formula One fan submissions.",
+        "tags": ["f1-fan-eval", "f1-humor", "f1-fan", "vc_manage_eval"],
+        "sample_queries": {
+            "1": {
+                "input": "Sometimes I watch F1 and laugh because they just drive in circles for two hours and call it strategy. It’s like watching someone do taxes at 300 km/h.",
+                "expected_output": "10–25 range across sub-criteria"
+            },
+            "2": {
+                "input": "Ferrari should start selling calendars—they seem to know a lot about timing… just never during pit stops. Still, I love them.",
+                "expected_output": "31–50 range across sub-criteria"
+            },
+            "3": {
+                "input": "DRS is like opening a can of Red Bull for your car. You get wings for a few seconds and then reality (and dirty air) hits back.",
+                "expected_output": "51–70 range across sub-criteria"
+            },
+            "4": {
+                "input": "When Crofty says ‘Lights out and away we go!’ my coffee spills, my cat runs, and I shout at my TV as if I’m part of the strategy team. It’s chaotic comedy every Sunday.",
+                "expected_output": "71–89 range across sub-criteria"
+            },
+            "5": {
+                "input": "F1 is the only sport where millionaires risk everything just to complain about tire degradation. Toto throws radios, Lando throws shade, and everyone blames strategy—pure Shakespeare on wheels.",
+                "expected_output": "90–100 range across sub-criteria"
+            }
+        }
+    },
+    "llm_config": {
+        "use_model": "gpt-4o",
+    },
+    "max_iterations": 40000,
+    "max_execution_seconds": 6000,
+
+    "grounding_instructions": """
+Follow this rubric when evaluating F1-related responses.  
+Use the same scale for all criteria (1–100):
+
+### RUBRIC
+**1–30: Poor or Minimal** – Lacks factual accuracy, shows little to no F1 understanding, very generic or confused.  
+**31–50: Below Average** – Some relevant references, but incorrect or superficial; lacks depth or precision.  
+**51–70: Average to Good** – Basic understanding shown; reasonably accurate but not insightful.  
+**71–89: Strong** – Knowledgeable, specific, confident, and contextually correct; engaging or thoughtful.  
+**90–100: Exceptional** – Deep, expert-level insight; correct terminology, memorable phrasing, or highly contextual clarity.
+
+### SCORING POLICY
+- Penalize vague, generic, or repetitive statements.  
+- Reserve 90+ for truly exceptional, insightful responses.  
+- Use the full 1–100 range; don’t cluster around 60–80.  
+- No score may be null or omitted. 
+    """,
+    "aaosa_instructions_suffix": """
+**IMPORTANT:** Always invoke your 'evaluate_score' tool with the full text as 'inquiry' to evaluate the inputs.
+If the returned score is None or null or empty, invoke the 'evaluate_score' tool again.
+    """,
+
+    "tools": [
+        {
+            "name": "f1-humor-eval",
+            "function": {
+                "description": "I can help you evaluate a fan’s Formula 1 humor, wit, and comedic tone in their F1 submission."
+            },
+            "instructions": """
+You are the orchestration agent for F1 fan evaluation.
+
+Your task is to analyze a fan’s text submission and coordinate a scoring process by invoking 'evaluate_score'.
+The text is short (or sometimes vague) and should be judged on the given sub-criteria in connection to F1.
+
+ALWAYS call 'evaluate_score' to perform the scoring.
+            """ ${aaosa_instructions_suffix},
+            "allow": {
+                "to_upstream": {
+                    "sly_data": {
+                        "evaluation": true,
+                    }
+                }
+            },
+            "tools": ["evaluate_score"]
+        },
+        # Evaluate Innovation
+        {
+            "name": "evaluate_score",
+            "function": ${aaosa_call},
+            "instructions": """
+You are a Formula 1 historian and analyst evaluating the F1 knowledge demonstrated by a fan in a short text (~400 characters).
+Always use your tools to evaluate the inputs.
+
+Step 1:
+""" ${grounding_instructions} """
+
+Evaluate **F1 Humor** specifically on these 10 sub-criteria (each scored 1–100):
+1. Originality of humor (avoids clichés)
+2. Relevance to Formula 1 (teams, drivers, culture)
+3. Timing and delivery within short text
+4. Use of F1 terminology for comedic effect
+5. Creativity and imagination of the joke
+6. Balance between humor and insight
+7. Tone and relatability to F1 fans
+8. Subtlety and wit (avoids being forced)
+9. Memorability and quotability
+10. Overall comedic impact and cleverness
+
+If the text is too vague, adjust scores accordingly.
+
+Step 2:
+Return a JSON object:
+{{
+  "score": [<a list of above 10 scores, all between 1 and 100>],
+  "brief_description": "<Brief rationale of your evaluation>"
+}}
+
+Step 3:
+**IMPORTANT:** Always call the 'manage_eval' tool with this JSON to store the evaluation result.
+            """,
+            "command": """
+Call the 'manage_eval' tool and return the json block with following fields:
+{{
+    "score": <number between 1 and 100 (1 = no humor at all, 100 = exceptionally great humor)>,
+    "brief_description": "<brief description of your scoring rationale>"
+}}
+            """,
+            "tools": ["manage_eval"]
+        },
+        // Manage idea evaluation
+        {
+            "name": "manage_eval",
+            "function": {
+                "description": "I can update the evaluation with the scores and descriptions provided by the other tools.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "score": {
+                            "type": "array",
+                            "items": {
+                                "type": "float",
+                                },
+                            "description": "a list of scores, between 1 and 100."
+                        },
+                        "brief_description": {
+                            "type": "string",
+                            "description": "Short rationale for the scoring outcome."
+                        }
+                    },
+                }
+            },
+            "class": "vc_manage_eval.ManageEval"
+        },
+    ]
+}

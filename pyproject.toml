@@ -1,0 +1,46 @@
+[project]
+name = "f1-fan-eval"
+version = "0.1.0"
+description = "A Neuro-san powered True F1-Fan evaluator"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "celery>=5.5.3",
+    "chardet>=5.2.0",
+    "dash>=3.2.0",
+    "dash-bootstrap-components>=2.0.4",
+    "dash-extensions>=2.0.4",
+    "jupyterlab>=4.4.0",
+    "neuro-san>=0.6.5",
+    "pandas>=2.3.3",
+    "psycopg2-binary>=2.9.11",
+    "redis>=6.4.0",
+    "sqlalchemy>=2.0.44",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.9.0",
+    "pylint>=4.0.0",
+    "pytest>=8.4.2",
+    "ruff>=0.14.0",
+]
+ui = [
+    "nsflow>=0.6.1",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+extend-exclude = ["venv", ".venv", "build", "dist", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+ignore = ["E501", "G004"]  # optionally ignore line length if Black handles it
+
+[tool.ruff.format]
+# Use Ruff's formatter (Black-compatible)
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"

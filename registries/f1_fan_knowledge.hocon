@@ -1,0 +1,150 @@
+
+{
+    include "registries/aaosa.hocon"
+    "metadata": {
+        "description": "A simple agent network to evaluate Formula One fan's knowledge."
+        "tags": ["f1-fan-eval", "f1-knowledge", "f1-fan", "vc_manage_eval"],
+        "sample_queries": {
+            "1": {
+                "input": "F1 is cool because cars go fast. I like when drivers win races and the crowd cheers. It’s all about speed and the best car usually wins. I don’t know much about the rules or who’s racing but it’s exciting to watch sometimes when I see it on TV.",
+                "expected_output": "10–25 range across sub-criteria"
+            },
+            "2": {
+                "input": "I think Lewis Hamilton is the best because he wins a lot and drives a Mercedes. Pit stops are important for fuel and tires, and teams try to be faster than others. Sometimes safety cars change the race, and that’s what makes F1 unpredictable.",
+                "expected_output": "31–50 range across sub-criteria"
+            },
+            "3": {
+                "input": "F1 strategy often depends on tire choice and timing the pit stops during virtual safety cars. Drivers like Verstappen and Norris show how car setup and track temperature really matter. Even though Red Bull dominates now, midfield battles are still intense.",
+                "expected_output": "51–70 range across sub-criteria"
+            },
+            "4": {
+                "input": "Understanding tire degradation and DRS zones is key to modern F1 strategy. Verstappen’s dominance reflects not just talent but Red Bull’s aerodynamic efficiency. The cost cap has reshaped how teams innovate, though Ferrari’s inconsistency still frustrates fans.",
+                "expected_output": "71–89 range across sub-criteria"
+            },
+            "5": {
+                "input": "Since the hybrid era began in 2014, the balance between power unit efficiency and aero load has defined F1 performance. Verstappen’s precision mirrors Schumacher’s dominance, but the 2022 ground-effect regs revived racing parity. F1’s constant tech evolution keeps the sport intellectually thrilling.",
+                "expected_output": "90–100 range across sub-criteria"
+            }
+        }
+    },
+    "llm_config": {
+        "use_model": "gpt-4o",
+    },
+    "max_iterations": 40000,
+    "max_execution_seconds": 6000,
+
+    "grounding_instructions": """
+Follow this rubric when evaluating F1-related responses.  
+Use the same scale for all criteria (1–100):
+
+### RUBRIC
+**1–30: Poor or Minimal** – Lacks factual accuracy, shows little to no F1 understanding, very generic or confused.  
+**31–50: Below Average** – Some relevant references, but incorrect or superficial; lacks depth or precision.  
+**51–70: Average to Good** – Basic understanding shown; reasonably accurate but not insightful.  
+**71–89: Strong** – Knowledgeable, specific, confident, and contextually correct; engaging or thoughtful.  
+**90–100: Exceptional** – Deep, expert-level insight; correct terminology, memorable phrasing, or highly contextual clarity.
+
+### SCORING POLICY
+- Penalize vague, generic, or repetitive statements.  
+- Reserve 90+ for truly exceptional, insightful responses.  
+- Use the full 1–100 range; don’t cluster around 60–80.  
+- No score may be null or omitted. 
+    """,
+    "aaosa_instructions_suffix": """
+**IMPORTANT:** Always invoke your 'evaluate_score' tool with the full text as 'inquiry' to evaluate the inputs.
+If the returned score is None or null or empty, invoke the 'evaluate_score' tool again.
+    """,
+
+    "tools": [
+        {
+            "name": "f1-knowledge-eval",
+            "function": {
+                "description": "I can help you evaluate a fan’s Formula 1 knowledge based on their submission."
+            },
+            "instructions": """
+You are the orchestration agent for F1 fan evaluation.
+
+Your task is to analyze a fan’s text submission and coordinate a scoring process by invoking 'evaluate_score'.
+The text is short (or sometimes vague) and should be judged on the given sub-criteria in connection to F1.
+
+ALWAYS call 'evaluate_score' to perform the scoring.
+            """ ${aaosa_instructions_suffix},
+            "allow": {
+                "to_upstream": {
+                    "sly_data": {
+                        "evaluation": true,
+                    }
+                }
+            },
+            "tools": ["evaluate_score"]
+        },
+        # Evaluate Innovation
+        {
+            "name": "evaluate_score",
+            "function": ${aaosa_call},
+            "instructions": """
+You are a Formula 1 historian and analyst evaluating the F1 knowledge demonstrated by a fan in a short text (~400 characters).
+Always use your tools to evaluate the inputs.
+
+Step 1:
+""" ${grounding_instructions} """
+
+Evaluate **F1 Knowledge** specifically on these 10 sub-criteria (each scored 1–100):
+1. Accuracy of F1 facts (drivers, teams, circuits, eras)
+2. Understanding of race strategy or technical aspects
+3. Historical context awareness (past champions, rivalries)
+4. Knowledge of team dynamics and rivalries
+5. Recognition of driver skill and style
+6. Awareness of modern trends (current grid, regulations, etc.)
+7. Use of correct F1 terminology and jargon
+8. Balance of objectivity vs fandom bias
+9. Depth of insight despite brevity (~400 chars)
+10. Overall impression of F1 expertise and confidence
+
+If the text is too vague, adjust scores accordingly.
+
+Step 2:
+Return a JSON object:
+{{
+  "score": [<a list of above 10 scores, all between 1 and 100>],
+  "brief_description": "<Brief rationale of your evaluation>"
+}}
+
+Step 3:
+**IMPORTANT:** Always call the 'manage_eval' tool with this JSON to store the evaluation result.
+            """,
+            "command": """
+Call the 'manage_eval' tool and return the json block with following fields:
+{{
+    "score": <number between 1 and 100 (1 = no knowledge at all, 100 = exceptionally high knowledge)>,
+    "brief_description": "<brief description of your scoring rationale>"
+}}
+            """,
+            "tools": ["manage_eval"]
+        },
+        // Manage idea evaluation
+        {
+            "name": "manage_eval",
+            "function": {
+                "description": "I can update the evaluation with the scores and descriptions provided by the other tools.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "score": {
+                            "type": "array",
+                            "items": {
+                                "type": "float",
+                                },
+                            "description": "a list of scores, between 1 and 100."
+                        },
+                        "brief_description": {
+                            "type": "string",
+                            "description": "Short rationale for the scoring outcome."
+                        }
+                    },
+                }
+            },
+            "class": "vc_manage_eval.ManageEval"
+        },
+    ]
+}

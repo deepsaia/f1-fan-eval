@@ -1,0 +1,9 @@
+{
+    # To use these agents in an automated pipeline, go to this repo:
+    # https://github.com/deepsaia/f1-fan-eval
+    # Go through the README instructions to set up the environment and run the evaluation.
+    "f1_fan_knowledge.hocon": {"serve": True, "public": True},
+    "f1_fan_enthusiasm.hocon": {"serve": True, "public": True},
+    "f1_fan_humor.hocon": {"serve": True, "public": True},
+    "f1_fan_eval.hocon": {"serve": False, "public": False},
+}
